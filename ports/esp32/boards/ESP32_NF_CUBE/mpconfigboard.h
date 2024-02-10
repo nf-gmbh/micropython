@@ -9,3 +9,7 @@
 
 #define MICROPY_HW_I2C0_SCL                 (9)
 #define MICROPY_HW_I2C0_SDA                 (8)
+
+#define MICROPY_BOARD_STARTUP                           NF_CUBE_ESP32S3_board_startup
+void NF_CUBE_ESP32S3_board_startup(void);
+
