@@ -56,8 +56,6 @@
 #include "shared/tinyusb/mp_usbd.h"
 #include "mbedtls/platform_time.h"
 
-#include <esp_task_wdt.h>
-
 #include "uart.h"
 #include "usb.h"
 #include "usb_serial_jtag.h"
@@ -83,11 +81,6 @@ typedef struct _native_code_node_t {
 static native_code_node_t *native_code_head = NULL;
 
 static void esp_native_code_free_all(void);
-
-void esp_task_wdt_isr_user_handler(void) {
-    gpio_set_level(1, 0);
-    gpio_set_level(2, 0);
-}
 
 int vprintf_null(const char *format, va_list ap) {
     // do nothing: this is used as a log target during raw repl mode
