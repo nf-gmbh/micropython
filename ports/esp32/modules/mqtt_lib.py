@@ -378,12 +378,7 @@ class MQTT_base:
             self._sock.close()
 
     def close(self):  # API. See https://github.com/peterhinch/micropython-mqtt/issues/60
-        self._close()
-        try:
-            self._sta_if.disconnect()  # Disconnect Wi-Fi to avoid errors
-        except OSError:
-            self.dprint("Wi-Fi not started, unable to disconnect interface")
-        self._sta_if.active(False)
+        self._close() # removed wifi disconnect, because wifi logic is handled in core api
 
     async def _await_pid(self, pid):
         t = ticks_ms()
@@ -588,26 +583,31 @@ class MQTTClient(MQTT_base):
                     await asyncio.sleep(1)
         else:
             s.active(True)
+
+            if s.isconnected():
+                return
+
             if RP2:  # Disable auto-sleep.
-                # https://datasheets.raspberrypi.com/picow/connecting-to-the-internet-with-pico-w.pdf
-                # para 3.6.3
                 s.config(pm=0xA11140)
+
+            if self._ssid is None or self._wifi_pw is None:
+                raise OSError("Wi-Fi credentials not configured in mqtt_lib")
+
             s.connect(self._ssid, self._wifi_pw)
             for _ in range(60):  # Break out on fail or success. Check once per sec.
                 await asyncio.sleep(1)
-                # Loop while connecting or no IP
                 if s.isconnected():
                     break
                 if ESP32:
-                    if s.status() != network.STAT_CONNECTING:  # 1001
+                    if s.status() != network.STAT_CONNECTING:
                         break
-                elif PYBOARD:  # No symbolic constants in network
+                elif PYBOARD:
                     if not 1 <= s.status() <= 2:
                         break
-                elif RP2:  # 1 is STAT_CONNECTING. 2 reported by user (No IP?)
+                elif RP2:
                     if not 1 <= s.status() <= 2:
                         break
-            else:  # Timeout: still in connecting state
+            else:
                 s.disconnect()
                 await asyncio.sleep(1)
 
@@ -624,48 +624,45 @@ class MQTTClient(MQTT_base):
 
     async def connect(self, *, quick=False):  # Quick initial connect option for battery apps
         if not self._has_connected:
-            await self.wifi_connect(quick)  # On 1st call, caller handles error
+            if not self._sta_if.isconnected():
+                await self.wifi_connect(quick)
             # Note this blocks if DNS lookup occurs. Do it once to prevent
             # blocking during later internet outage:
             self._addr = socket.getaddrinfo(self.server, self.port)[0][-1]
-        self._in_connect = True  # Disable low level ._isconnected check
+        self._in_connect = True
         try:
             if not self._has_connected and self._clean_init and not self._clean:
-                # Power up. Clear previous session data but subsequently save it.
-                # Issue #40
-                await self._connect(True)  # Connect with clean session
+                await self._connect(True)
                 try:
                     async with self.lock:
-                        self._sock.write(b"\xe0\0")  # Force disconnect but keep socket open
+                        self._sock.write(b"\xe0\0")
                 except OSError:
                     pass
                 self.dprint("Waiting for disconnect")
-                await asyncio.sleep(2)  # Wait for broker to disconnect
+                await asyncio.sleep(2)
                 self.dprint("About to reconnect with unclean session.")
             await self._connect(self._clean)
         except Exception:
             self._close()
-            self._in_connect = False  # Caller may run .isconnected()
+            self._in_connect = False
             raise
         self.rcv_pids.clear()
-        # If we get here without error broker/LAN must be up.
         self._isconnected = True
-        self._in_connect = False  # Low level code can now check connectivity.
+        self._in_connect = False
         if not self._events:
-            asyncio.create_task(self._wifi_handler(True))  # User handler.
+            asyncio.create_task(self._wifi_handler(True))
         if not self._has_connected:
-            self._has_connected = True  # Use normal clean flag on reconnect.
+            self._has_connected = True
             asyncio.create_task(self._keep_connected())
-            # Runs forever unless user issues .disconnect()
 
-        asyncio.create_task(self._handle_msg())  # Task quits on connection fail.
+        asyncio.create_task(self._handle_msg())
         self._tasks.append(asyncio.create_task(self._keep_alive()))
         if self.DEBUG:
             self._tasks.append(asyncio.create_task(self._memory()))
         if self._events:
-            self.up.set()  # Connectivity is up
+            self.up.set()
         else:
-            asyncio.create_task(self._connect_handler(self))  # User handler.
+            asyncio.create_task(self._connect_handler(self))
 
     # Launched by .connect(). Runs until connectivity fails. Checks for and
     # handles incoming messages.
@@ -731,36 +728,32 @@ class MQTTClient(MQTT_base):
         while not self._isconnected:
             await asyncio.sleep(1)
 
-    # Scheduled on 1st successful connection. Runs forever maintaining wifi and
-    # broker connection. Must handle conditions at edge of WiFi range.
     async def _keep_connected(self):
         while self._has_connected:
-            if self.isconnected():  # Pause for 1 second
+            if self.isconnected():
                 await asyncio.sleep(1)
                 gc.collect()
-            else:  # Link is down, socket is closed, tasks are killed
-                try:
-                    self._sta_if.disconnect()
-                except OSError:
-                    self.dprint("Wi-Fi not started, unable to disconnect interface")
+                continue
+
+            # Wi-Fi is owned externally by CoreAPI.
+            # Do NOT disconnect/reconnect STA here.
+            while self._has_connected and not self._sta_if.isconnected():
                 await asyncio.sleep(1)
-                try:
-                    await self.wifi_connect()
-                except OSError:
-                    continue
-                if not self._has_connected:  # User has issued the terminal .disconnect()
-                    self.dprint("Disconnected, exiting _keep_connected")
-                    break
-                try:
-                    await self.connect()
-                    # Now has set ._isconnected and scheduled _connect_handler().
-                    self.dprint("Reconnect OK!")
-                except OSError as e:
-                    self.dprint("Error in reconnect. %s", e)
-                    # Can get ECONNABORTED or -1. The latter signifies no or bad CONNACK received.
-                    self._close()  # Disconnect and try again.
-                    self._in_connect = False
-                    self._isconnected = False
+
+            if not self._has_connected:
+                self.dprint("Disconnected, exiting _keep_connected")
+                break
+
+            try:
+                await self.connect()
+                self.dprint("Reconnect OK!")
+            except OSError as e:
+                self.dprint("Error in reconnect. %s", e)
+                self._close()
+                self._in_connect = False
+                self._isconnected = False
+                await asyncio.sleep(1)
+
         self.dprint("Disconnected, exited _keep_connected")
 
     async def subscribe(self, topic, qos=0):
