@@ -63,14 +63,14 @@ else ifeq ($(ARCH),armv6m)
 # thumb
 CROSS = arm-none-eabi-
 CFLAGS_ARCH += -mthumb -mcpu=cortex-m0
-MICROPY_FLOAT_IMPL ?= none
+MICROPY_FLOAT_IMPL ?= float
 
 else ifeq ($(ARCH),armv7m)
 
 # thumb
 CROSS = arm-none-eabi-
 CFLAGS_ARCH += -mthumb -mcpu=cortex-m3
-MICROPY_FLOAT_IMPL ?= none
+MICROPY_FLOAT_IMPL ?= float
 
 else ifeq ($(ARCH),armv7emsp)
 
@@ -106,7 +106,7 @@ else ifeq ($(ARCH),rv32imc)
 # rv32imc
 CROSS = riscv64-unknown-elf-
 CFLAGS_ARCH += -march=rv32imac -mabi=ilp32 -mno-relax
-# If Picolibc is available then select it explicitly.  Ubuntu 22.04 ships its
+# If Picolibc is available then select it explicitly.  Ubuntu 24.04 ships its
 # bare metal RISC-V toolchain with Picolibc rather than Newlib, and the default
 # is "nosys" so a value must be provided.  To avoid having per-distro
 # workarounds, always select Picolibc if available.
@@ -120,8 +120,31 @@ endif
 
 MICROPY_FLOAT_IMPL ?= none
 
+else ifeq ($(ARCH),rv64imc)
+
+# rv64imc
+CROSS = riscv64-unknown-elf-
+CFLAGS_ARCH += -march=rv64imac -mabi=lp64 -mno-relax
+# If Picolibc is available then select it explicitly.  Ubuntu 24.04 ships its
+# bare metal RISC-V toolchain with Picolibc rather than Newlib, and the default
+# is "nosys" so a value must be provided.  To avoid having per-distro
+# workarounds, always select Picolibc if available.
+PICOLIBC_SPECS := $(shell $(CROSS)gcc --print-file-name=picolibc.specs)
+ifneq ($(PICOLIBC_SPECS),picolibc.specs)
+CFLAGS_ARCH += -specs=$(PICOLIBC_SPECS)
+USE_PICOLIBC := 1
+PICOLIBC_ARCH := rv64imac
+PICOLIBC_ABI := lp64
+endif
+
+MICROPY_FLOAT_IMPL ?= none
+
 else
 $(error architecture '$(ARCH)' not supported)
+endif
+
+ifneq ($(findstring -musl,$(shell $(CROSS)gcc -dumpmachine)),)
+USE_MUSL := 1
 endif
 
 MICROPY_FLOAT_IMPL_UPPER = $(shell echo $(MICROPY_FLOAT_IMPL) | tr '[:lower:]' '[:upper:]')
@@ -147,6 +170,8 @@ ifeq ($(LINK_RUNTIME),1)
 # distribution.
 ifeq ($(USE_PICOLIBC),1)
 LIBM_NAME := libc.a
+else ifeq ($(USE_MUSL),1)
+LIBM_NAME := libc.a
 else
 LIBM_NAME := libm.a
 endif
@@ -165,6 +190,12 @@ LIBM_PATH := $(PICOLIBC_ROOT)/$(PICOLIBC_ARCH)/$(PICOLIBC_ABI)/$(LIBM_NAME)
 endif
 endif
 MPY_LD_FLAGS += $(addprefix -l, $(LIBGCC_PATH) $(LIBM_PATH))
+endif
+ifneq ($(MPY_EXTERN_SYM_FILE),)
+MPY_LD_FLAGS += --externs "$(realpath $(MPY_EXTERN_SYM_FILE))"
+endif
+ifneq ($(ARCH_FLAGS),)
+MPY_LD_FLAGS += --arch-flags "$(ARCH_FLAGS)"
 endif
 
 CFLAGS += $(CFLAGS_EXTRA)

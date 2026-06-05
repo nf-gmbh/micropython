@@ -2,11 +2,6 @@
 #include "samd21.h"
 
 #define MICROPY_CONFIG_ROM_LEVEL        (MICROPY_CONFIG_ROM_LEVEL_BASIC_FEATURES)
-#if MICROPY_HW_CODESIZE == 248
-#define SAMD21_EXTRA_FEATURES           1
-#else
-#define SAMD21_EXTRA_FEATURES           0
-#endif
 
 // MicroPython emitters
 #define MICROPY_EMIT_THUMB              (SAMD21_EXTRA_FEATURES)
@@ -77,6 +72,9 @@ unsigned long trng_random_u32(int delay);
 #define MICROPY_PY_DEFLATE              (SAMD21_EXTRA_FEATURES)
 #ifndef MICROPY_PY_ONEWIRE
 #define MICROPY_PY_ONEWIRE              (SAMD21_EXTRA_FEATURES)
+#endif
+#ifndef MICROPY_PY_MACHINE_I2C_TARGET
+#define MICROPY_PY_MACHINE_I2C_TARGET   (SAMD21_EXTRA_FEATURES)
 #endif
 
 #ifndef MICROPY_PY_MACHINE_PIN_BOARD_CPU

@@ -10,7 +10,9 @@ set(MICROPY_SOURCE_EXTMOD
     ${MICROPY_EXTMOD_DIR}/machine_adc.c
     ${MICROPY_EXTMOD_DIR}/machine_adc_block.c
     ${MICROPY_EXTMOD_DIR}/machine_bitstream.c
+    ${MICROPY_EXTMOD_DIR}/machine_can.c
     ${MICROPY_EXTMOD_DIR}/machine_i2c.c
+    ${MICROPY_EXTMOD_DIR}/machine_i2c_target.c
     ${MICROPY_EXTMOD_DIR}/machine_i2s.c
     ${MICROPY_EXTMOD_DIR}/machine_mem.c
     ${MICROPY_EXTMOD_DIR}/machine_pulse.c

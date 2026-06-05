@@ -55,6 +55,13 @@
 #else
 #define MICROPY_PY_MACHINE_SDCARD_ENTRY
 #endif
+#if MICROPY_PY_MACHINE_QECNT
+#define MICROPY_PY_MACHINE_ENCODER_ENTRY { MP_ROM_QSTR(MP_QSTR_Encoder), MP_ROM_PTR(&machine_encoder_type) },
+#define MICROPY_PY_MACHINE_COUNTER_ENTRY { MP_ROM_QSTR(MP_QSTR_Counter), MP_ROM_PTR(&machine_counter_type) },
+#else
+#define MICROPY_PY_MACHINE_ENCODER_ENTRY
+#define MICROPY_PY_MACHINE_COUNTER_ENTRY
+#endif
 
 #define MICROPY_PY_MACHINE_EXTRA_GLOBALS \
     MICROPY_PY_MACHINE_LED_ENTRY \
@@ -62,6 +69,8 @@
     { MP_ROM_QSTR(MP_QSTR_Timer),               MP_ROM_PTR(&machine_timer_type) }, \
     { MP_ROM_QSTR(MP_QSTR_RTC),                 MP_ROM_PTR(&machine_rtc_type) }, \
     MICROPY_PY_MACHINE_SDCARD_ENTRY \
+    MICROPY_PY_MACHINE_ENCODER_ENTRY \
+    MICROPY_PY_MACHINE_COUNTER_ENTRY \
     \
     /* Reset reasons */ \
     { MP_ROM_QSTR(MP_QSTR_PWRON_RESET),         MP_ROM_INT(MP_PWRON_RESET) }, \
@@ -87,7 +96,7 @@ static mp_obj_t mp_machine_unique_id(void) {
     return mp_obj_new_bytes(id, sizeof(id));
 }
 
-NORETURN static void mp_machine_reset(void) {
+MP_NORETURN static void mp_machine_reset(void) {
     WDOG_TriggerSystemSoftwareReset(WDOG1);
     while (true) {
         ;
@@ -131,7 +140,7 @@ static void mp_machine_lightsleep(size_t n_args, const mp_obj_t *args) {
     mp_raise_NotImplementedError(NULL);
 }
 
-NORETURN static void mp_machine_deepsleep(size_t n_args, const mp_obj_t *args) {
+MP_NORETURN static void mp_machine_deepsleep(size_t n_args, const mp_obj_t *args) {
     if (n_args != 0) {
         mp_int_t seconds = mp_obj_get_int(args[0]) / 1000;
         if (seconds > 0) {
@@ -159,7 +168,7 @@ NORETURN static void mp_machine_deepsleep(size_t n_args, const mp_obj_t *args) {
     }
 }
 
-NORETURN void mp_machine_bootloader(size_t n_args, const mp_obj_t *args) {
+MP_NORETURN void mp_machine_bootloader(size_t n_args, const mp_obj_t *args) {
     #if defined(MICROPY_BOARD_ENTER_BOOTLOADER)
     // If a board has a custom bootloader, call it first.
     MICROPY_BOARD_ENTER_BOOTLOADER(n_args, args);
